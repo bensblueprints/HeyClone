@@ -129,6 +129,13 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_gui(args: argparse.Namespace) -> int:
+    from .gui import launch_gui
+
+    launch_gui()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="heyclone",
@@ -141,6 +148,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_doctor = sub.add_parser("doctor", help="Check environment readiness for cloning.")
     p_doctor.set_defaults(func=_cmd_doctor)
+
+    p_gui = sub.add_parser("gui", help="Launch the HeyClone desktop application.")
+    p_gui.set_defaults(func=_cmd_gui)
 
     p_voice = sub.add_parser("voice", help="Clone a reference voice and synthesize speech.")
     p_voice.add_argument("--reference", required=True, help="Reference audio of the voice to clone.")

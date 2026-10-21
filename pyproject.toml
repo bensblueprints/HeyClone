@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 heyclone = "heyclone.cli:main"
+heyclone-gui = "heyclone.gui:launch_gui"
 
 [tool.setuptools.packages.find]
 include = ["heyclone*"]

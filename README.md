@@ -5,6 +5,24 @@ A talking-head avatar and voice cloning toolkit. HeyClone clones a person's
 GPU/VRAM detection so it picks the right quality preset for an 8 GB, 16 GB, or
 32 GB card.
 
+## GUI
+
+HeyClone is a desktop application. Launch it with:
+
+```bash
+heyclone gui        # or: heyclone-gui, or python -m heyclone.gui
+```
+
+The window has four tabs:
+
+- **Detect** — GPU/VRAM tier + preset, and an environment readiness check.
+- **Voice Clone** — clone a voice from a reference clip and synthesize speech.
+- **Avatar** — detect and crop the face for the avatar.
+- **Full Clone** — avatar + cloned voice -> talking avatar, end to end.
+
+A command-line interface (`heyclone gpu`, `heyclone doctor`, ...) is available
+underneath for scripting.
+
 ## What it does
 
 ```
@@ -56,12 +74,15 @@ Add `--gpu` to also install the voice/avatar model dependencies; use
 `--dir PATH` to choose an install location. Re-running is safe (`--force`
 recreates the venv). After installing, run `heyclone gpu` / `heyclone doctor`.
 
-To build distributable native packages (run on the target OS):
+Prebuilt packages are produced automatically by the
+`.github/workflows/build-installers.yml` workflow (on GitHub's Windows, macOS,
+and Linux runners): `HeyClone.exe` (Windows), `HeyClone.dmg` (macOS), and a
+standalone Linux binary. To build locally on the target OS:
 
-- Windows `.exe` — compile `packaging/windows/heyclone.iss` with
-  [Inno Setup](https://jrsoftware.org/isinfo.php)
-- Linux `.deb` — `packaging/linux/build-deb.sh`
-- macOS `.pkg` — `packaging/macos/build-pkg.sh`
+- Windows `.exe` — run `packaging\windows\build-exe.bat` (uses PyInstaller), or
+  compile `packaging/windows/heyclone.iss` with Inno Setup
+- macOS `.dmg` — PyInstaller app bundle + `hdiutil` (see the workflow)
+- Linux — PyInstaller one-file binary, or `packaging/linux/build-deb.sh` for a `.deb`
 
 ## Commands
 
