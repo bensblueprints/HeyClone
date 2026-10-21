@@ -1,0 +1,10 @@
+# Core (GPU detection). pynvml is optional — detection also works via
+# nvidia-smi, torch.cuda, rocm-smi, and Windows WMI without it.
+pynvml>=11.5
+
+# Optional, installed only on GPU machines:
+#   torch         — CUDA runtime backend + model inference
+#   onnxruntime-gpu / onnxruntime  — diffusion inference
+#   transformers, diffusers, accelerate  — model pipeline
+#   TTS           — voice cloning (zero-shot TTS)
+#   opencv-python, numpy, imageio, ffmpeg  — face crop / video I/O

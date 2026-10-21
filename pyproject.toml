@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "heyclone"
+version = "0.1.0"
+description = "Talking-head avatar & voice cloning with GPU VRAM-aware presets"
+requires-python = ">=3.9"
+dependencies = [
+    "pynvml>=11.5",
+]
+
+[project.scripts]
+heyclone = "heyclone.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["heyclone*"]

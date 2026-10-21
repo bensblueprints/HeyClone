@@ -1,0 +1,12 @@
+# Heavy dependencies for the GPU / model stages.
+# Install on a CUDA machine (see README.md):
+#   pip install -r requirements-gpu.txt
+
+# Voice cloning (zero-shot TTS)
+TTS>=0.22.0
+
+# Avatar face detection + image/video I/O
+opencv-python
+numpy
+
+# Optional: production-quality face-landmark alignment (not required)
