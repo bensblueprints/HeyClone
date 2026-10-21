@@ -6,7 +6,7 @@ cd /d "%~dp0..\.."
 
 where python >nul 2>nul || (echo Python 3.9+ is required. & exit /b 1)
 
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name HeyClone --paths . packaging\heyclone_gui_entry.py
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name HeyClone --paths . --collect-all customtkinter packaging\heyclone_gui_entry.py
 if errorlevel 1 exit /b 1
 
 echo.

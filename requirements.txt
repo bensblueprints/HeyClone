@@ -1,6 +1,7 @@
 # Core (GPU detection). pynvml is optional — detection also works via
 # nvidia-smi, torch.cuda, rocm-smi, and Windows WMI without it.
 pynvml>=11.5
+customtkinter>=5.2
 
 # Optional, installed only on GPU machines:
 #   torch         — CUDA runtime backend + model inference
