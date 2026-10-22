@@ -8,6 +8,7 @@ Launch with:
 
 from __future__ import annotations
 
+import json
 import time
 import sys
 import shutil
@@ -16,7 +17,7 @@ import queue
 import threading
 from pathlib import Path
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 
 import customtkinter as ctk
 
@@ -27,6 +28,7 @@ from .gpu.detect import detect_gpus
 from .voice.clone import VoiceCloner
 from .voice.library import VoiceLibrary
 from .voice.recording import VoiceRecorder
+from .voice.runtime import ENGINES, DEFAULT_ENGINE, engine_ready, install_runtime
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -216,24 +218,56 @@ class HeyCloneApp(ctk.CTk):
         return frame
 
     def _build_voices(self, parent) -> ctk.CTkFrame:
-        frame = self._section(parent, "Voices", "Choose a saved voice, write your script, and generate speech")
+        frame = self._section(parent, "Voices", "Choose a voice engine, select your saved voice, and write a script")
         card = self._card(frame, 2)
+        selected = DEFAULT_ENGINE
+        try:
+            selected = json.loads((self.voice_library.root / "preferences.json").read_text()).get("engine", DEFAULT_ENGINE)
+        except (OSError, ValueError, AttributeError):
+            pass
+        if selected not in ENGINES:
+            selected = DEFAULT_ENGINE
+        self.engine_choice = tk.StringVar(value=ENGINES[selected]["label"])
+        ctk.CTkLabel(card, text="Voice engine", font=_font(13)).grid(row=0, column=0, padx=18, pady=8, sticky="w")
+        self.engine_selector = ctk.CTkOptionMenu(card, variable=self.engine_choice, values=[e["label"] for e in ENGINES.values()], command=self._engine_changed)
+        self.engine_selector.grid(row=0, column=1, padx=18, pady=8, sticky="ew")
         self.voice_choice = tk.StringVar(value="No voices yet")
         self.voice_selector = ctk.CTkOptionMenu(card, variable=self.voice_choice, values=["No voices yet"])
-        self.voice_selector.grid(row=0, column=0, columnspan=2, padx=18, pady=14, sticky="ew")
-        self.lang_var = self._field(card, 1, "Language code", "en")
-        ctk.CTkLabel(card, text="Script", font=_font(13)).grid(row=2, column=0, padx=18, sticky="w")
-        self.script_box = ctk.CTkTextbox(card, height=150, font=_font(14))
-        self.script_box.grid(row=3, column=0, columnspan=2, padx=18, pady=10, sticky="ew")
-        self.generate_button = ctk.CTkButton(card, text="Generate speech", command=self._clone_voice, height=42, fg_color=ACCENT, state="disabled")
-        self.generate_button.grid(row=4, column=0, padx=18, pady=12)
+        self.voice_selector.grid(row=1, column=0, columnspan=2, padx=18, pady=8, sticky="ew")
+        self.lang_var = self._field(card, 2, "Language code", "en")
+        self.engine_status = tk.StringVar(value=self._engine_status_text(selected))
+        ctk.CTkLabel(card, textvariable=self.engine_status, font=_font(12), text_color=MUTED, wraplength=560, justify="left").grid(row=3, column=0, columnspan=2, padx=18, pady=4, sticky="w")
+        ctk.CTkLabel(card, text="Script", font=_font(13)).grid(row=4, column=0, padx=18, sticky="w")
+        self.script_box = ctk.CTkTextbox(card, height=110, font=_font(14))
+        self.script_box.grid(row=5, column=0, columnspan=2, padx=18, pady=8, sticky="ew")
+        self.generate_button = ctk.CTkButton(card, text="Generate speech", command=self._clone_voice, height=38, fg_color=ACCENT, state="disabled")
+        self.generate_button.grid(row=6, column=0, padx=18, pady=8)
         self.play_button = ctk.CTkButton(card, text="Play speech", command=self._play_speech, state="disabled")
-        self.play_button.grid(row=4, column=1, padx=18, pady=12, sticky="w")
+        self.play_button.grid(row=6, column=1, padx=18, pady=8, sticky="w")
         self.export_button = ctk.CTkButton(card, text="Save a copy...", command=self._export_speech, state="disabled")
-        self.export_button.grid(row=5, column=0, padx=18, pady=(0, 12))
-        ctk.CTkButton(card, text="Set up voice engine", command=self._setup_voice_engine).grid(row=5, column=1, padx=18, pady=(0, 12), sticky="w")
+        self.export_button.grid(row=7, column=0, padx=18, pady=(0, 12))
+        ctk.CTkButton(card, text="Install / repair engine", command=self._setup_voice_engine).grid(row=7, column=1, padx=18, pady=(0, 12), sticky="w")
         self.speech_result = self._result_box(frame, 3)
         return frame
+
+    def _selected_engine(self):
+        return next(key for key, spec in ENGINES.items() if spec["label"] == self.engine_choice.get())
+
+    def _engine_status_text(self, engine):
+        state = "Ready" if engine_ready(engine) else "Not installed ? click Install / repair engine (several GB)"
+        license_info = "MIT license" if engine != "xtts" else "XTTS model: non-commercial use under CPML"
+        return f"{state}. {license_info}."
+
+    def _engine_changed(self, _label=None):
+        engine = self._selected_engine()
+        self.engine_status.set(self._engine_status_text(engine))
+        if self.lang_var.get().strip() not in ENGINES[engine]["languages"].split():
+            self.lang_var.set("en")
+        try:
+            self.voice_library.root.mkdir(parents=True, exist_ok=True)
+            (self.voice_library.root / "preferences.json").write_text(json.dumps({"engine": engine}), encoding="utf-8")
+        except OSError as exc:
+            self._show_error(self.speech_result, f"Could not save your engine preference: {exc}")
 
     def _build_avatar(self, parent) -> ctk.CTkFrame:
         frame = self._section(parent, "Avatar", "Detect and crop the face for the avatar")
@@ -257,8 +291,8 @@ class HeyCloneApp(ctk.CTk):
         self._browse(card, 1, self.c_ref_var, _AUDIO_TYPES, "audio2")
         self.c_text_var = self._field(card, 2, "Text to speak")
         self.c_lang_var = self._field(card, 3, "Language code", "en")
-        self.c_out_var = self._field(card, 4, "Output video (.mp4)")
-        self._browse(card, 4, self.c_out_var, [("MP4", "*.mp4"), ("All files", "*.*")], "savevideo")
+        self.c_out_var = self._field(card, 4, "Output video location")
+        self._browse(card, 4, self.c_out_var, [], "videodir")
         ctk.CTkButton(
             card, text="Create Clone", height=42, corner_radius=8,
             fg_color=ACCENT, hover_color=ACCENT_HOVER, font=_font(14, "bold"),
@@ -281,7 +315,9 @@ class HeyCloneApp(ctk.CTk):
 
     def _browse(self, card: ctk.CTkFrame, row: int, var: tk.StringVar, filetypes, kind: str) -> None:
         def choose():
-            if kind in ("audio", "audio2", "source", "source2"):
+            if kind == "videodir":
+                path = filedialog.askdirectory(title="Choose output video location", mustexist=False)
+            elif kind in ("audio", "audio2", "source", "source2"):
                 path = filedialog.askopenfilename(filetypes=filetypes)
             else:
                 ext = ".wav" if kind == "saveaudio" else ".mp4"
@@ -321,15 +357,15 @@ class HeyCloneApp(ctk.CTk):
     def _refresh_gpu(self) -> None:
         if not self.detection.gpus:
             self.gpu_var.set("No discrete GPU detected")
-            self.preset_var.set("CPU-only mode — voice cloning only (very slow).")
+            self.preset_var.set("CPU-only mode - voice cloning only (very slow).")
             self.side_gpu.configure(text="No discrete GPU\nCPU-only mode")
             return
         best = self.detection.best_gpu
         preset = get_preset(best.tier)
-        self.gpu_var.set(f"{best.name}  ·  {best.total_gb:.2f} GB")
+        self.gpu_var.set(f"{best.name}  |  {best.total_gb:.2f} GB")
         self.preset_var.set(
-            f"{preset.label}  ·  {preset.face_resolution[0]}x{preset.face_resolution[1]}  ·  "
-            f"{preset.model_precision}  ·  batch {preset.max_batch_size}"
+            f"{preset.label}  |  {preset.face_resolution[0]}x{preset.face_resolution[1]}  |  "
+            f"{preset.model_precision}  |  batch {preset.max_batch_size}"
         )
         self.side_gpu.configure(text=f"{best.tier.value.upper()} tier\n{best.total_gb:.2f} GB")
 
@@ -426,7 +462,7 @@ class HeyCloneApp(ctk.CTk):
         if not voice or not text:
             self._show_error(self.speech_result, "Select a voice and type a script first.")
             return
-        cloner = VoiceCloner(detection=self.detection, use_runtime=sys.platform == "win32")
+        cloner = VoiceCloner(detection=self.detection, use_runtime=sys.platform == "win32", engine=self._selected_engine(), progress=self._engine_progress)
         def fn():
             out = self.voice_library.output_path()
             return cloner.clone_voice(voice.reference, text, out, lang)
@@ -437,20 +473,59 @@ class HeyCloneApp(ctk.CTk):
             self._show_ok(self.speech_result, f"Speech saved automatically to {result.output_path}")
         self._run_async(fn, self.speech_result, "Generating speech", generated)
 
+    def _engine_progress(self, message):
+        self._queue.put(("progress", message))
+
     def _setup_voice_engine(self):
         if self._busy or self.recorder.stream is not None:
             return
-        import webbrowser
+        engine = self._selected_engine()
+        if engine == "xtts":
+            from .voice.library import data_dir
+            if not (data_dir() / "xtts-terms-accepted").is_file():
+                self._show_xtts_terms()
+                return
+        self._install_engine(engine)
+
+    def _install_engine(self, engine):
+        def completed(message):
+            self.engine_status.set(self._engine_status_text(self._selected_engine()))
+            self._show_ok(self.speech_result, message)
+        self._run_async(lambda: install_runtime(engine, progress=self._engine_progress), self.speech_result,
+                        f"Installing {ENGINES[engine]['label']}", completed)
+
+    def _show_xtts_terms(self):
         from .voice.library import data_dir
-        from .voice.runtime import install_runtime
-        if messagebox.askyesno("Voice engine setup", "Setup downloads the speech engine (several GB). XTTS has model license terms at https://coqui.ai/cpml. Open the terms before continuing?"):
-            webbrowser.open("https://coqui.ai/cpml")
-        if not messagebox.askyesno("XTTS model terms", "Do you accept the XTTS model terms at https://coqui.ai/cpml and want to install the voice engine?"):
+        try:
+            terms = (Path(__file__).parent / "voice" / "licenses" / "XTTS.txt").read_text(encoding="utf-8")
+        except OSError as exc:
+            self._show_error(self.speech_result, f"The bundled XTTS license is missing: {exc}")
             return
-        root = data_dir()
-        root.mkdir(parents=True, exist_ok=True)
-        (root / "xtts-terms-accepted").write_text("Accepted in HeyClone setup", encoding="utf-8")
-        self._run_async(install_runtime, self.speech_result, "Installing voice engine ? this may take several minutes")
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Coqui XTTS model terms")
+        dialog.geometry("720x540")
+        dialog.transient(self)
+        dialog.grab_set()
+        ctk.CTkLabel(dialog, text="XTTS permits non-commercial use. Chatterbox uses the MIT license.", wraplength=650).pack(padx=20, pady=12)
+        box = ctk.CTkTextbox(dialog)
+        box.pack(fill="both", expand=True, padx=20, pady=10)
+        box.insert("1.0", terms)
+        box.configure(state="disabled")
+        def accept():
+            root = data_dir()
+            try:
+                root.mkdir(parents=True, exist_ok=True)
+                (root / "xtts-terms-accepted").write_text("CPML 1.0.0 accepted in HeyClone", encoding="utf-8")
+            except OSError as exc:
+                self._show_error(self.speech_result, str(exc))
+                dialog.destroy()
+                return
+            dialog.destroy()
+            self._install_engine("xtts")
+        buttons = ctk.CTkFrame(dialog)
+        buttons.pack(pady=14)
+        ctk.CTkButton(buttons, text="Accept and install XTTS", command=accept).pack(side="left", padx=8)
+        ctk.CTkButton(buttons, text="Cancel", command=dialog.destroy).pack(side="left", padx=8)
 
     def _play_speech(self):
         if self._last_speech is None:
@@ -492,7 +567,7 @@ class HeyCloneApp(ctk.CTk):
             p = cloner.prepare(src)
             return (
                 f"Face crop: {p.face_crop_path or 'no face detected'}\n"
-                f"Faces: {p.num_faces} · Resolution: {p.face_resolution[0]}x{p.face_resolution[1]}"
+                f"Faces: {p.num_faces} | Resolution: {p.face_resolution[0]}x{p.face_resolution[1]}"
             )
 
         self._run_async(fn, self.avatar_result, "Preparing avatar")
@@ -501,17 +576,22 @@ class HeyCloneApp(ctk.CTk):
         src = self.c_src_var.get().strip()
         ref = self.c_ref_var.get().strip()
         text = self.c_text_var.get().strip()
-        out = self.c_out_var.get().strip()
+        location = self.c_out_var.get().strip()
         lang = self.c_lang_var.get().strip() or "en"
-        if not (src and ref and text and out):
-            self._show_error(self.clone_result, "Please fill in source, reference audio, text, and output video.")
+        if not (src and ref and text and location):
+            self._show_error(self.clone_result, "Please fill in source, reference audio, text, and choose an output video location.")
             return
+        folder = Path(location)
+        if folder.is_file() or folder.suffix.lower() == ".mp4":
+            self._show_error(self.clone_result, "Choose an output folder, rather than an .mp4 filename.")
+            return
+        out = folder / f"heyclone-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}.mp4"
         avatar = AvatarCloner(detection=self.detection)
-        voice = VoiceCloner(detection=self.detection, use_runtime=sys.platform == "win32")
+        voice = VoiceCloner(detection=self.detection, use_runtime=sys.platform == "win32", engine=self._selected_engine(), progress=self._engine_progress)
 
         def fn():
             profile = avatar.prepare(src)
-            voice_out = Path(out).with_name("cloned_voice.wav")
+            voice_out = out.with_suffix(".wav")
             vres = voice.clone_voice(ref, text, voice_out, lang)
             ares = avatar.animate(profile, vres.output_path, out)
             return f"Talking avatar saved to {ares.output_video}"
@@ -521,7 +601,7 @@ class HeyCloneApp(ctk.CTk):
     # ------------------------------------------------------- background
     def _run_async(self, fn, result_box: ctk.CTkTextbox, label: str, on_success=None) -> None:
         if self._busy or self.recorder.stream is not None:
-            self._set_status("Busy — another operation is running", DANGER)
+            self._set_status("Busy - another operation is running", DANGER)
             return
         self._busy = True
         self._set_status(f"{label} ...", ACCENT)
@@ -542,16 +622,26 @@ class HeyCloneApp(ctk.CTk):
         except queue.Empty:
             self.after(100, lambda: self._poll_queue(result_box, label, on_success))
             return
+        while status == "progress":
+            try:
+                status, payload = self._queue.get_nowait()
+            except queue.Empty:
+                break
+        if status == "progress":
+            self._set_status(str(payload)[-110:], ACCENT)
+            self._show_ok(result_box, str(payload))
+            self.after(100, lambda: self._poll_queue(result_box, label, on_success))
+            return
         self._busy = False
         self.progress.stop()
         if status == "ok":
-            self._set_status(f"Done — {label}", SUCCESS)
+            self._set_status(f"Done - {label}", SUCCESS)
             if on_success:
                 on_success(payload)
             else:
                 self._show_ok(result_box, payload)
         else:
-            self._set_status(f"Failed — {label}", DANGER)
+            self._set_status(f"Failed - {label}", DANGER)
             self._show_error(result_box, payload)
 
     # ----------------------------------------------------------- helpers

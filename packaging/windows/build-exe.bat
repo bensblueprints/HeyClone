@@ -12,7 +12,7 @@ if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 .venv\Scripts\python -c "from heyclone.avatar.opencv import load_face_detector; load_face_detector()"
 if errorlevel 1 exit /b 1
-.venv\Scripts\python -m PyInstaller --noconfirm --clean --onefile --windowed --name HeyClone --paths . --collect-all customtkinter --collect-all cv2 packaging\heyclone_gui_entry.py
+.venv\Scripts\python -m PyInstaller --noconfirm --clean --onefile --windowed --name HeyClone --paths . --collect-all customtkinter --collect-all cv2 --collect-data heyclone packaging\heyclone_gui_entry.py
 if errorlevel 1 exit /b 1
 
 echo.

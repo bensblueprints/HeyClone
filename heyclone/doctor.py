@@ -96,8 +96,8 @@ def check_environment(detection: Optional[DetectionResult] = None) -> list[Check
     # Voice cloning
     has_tts = _module_available("TTS")
     if getattr(sys, "frozen", False):
-        from .voice.runtime import runtime_python
-        has_tts = (runtime_python().parent.parent / "ready").is_file()
+        from .voice.runtime import ENGINES, engine_ready
+        has_tts = any(engine_ready(engine) for engine in ENGINES)
     checks.append(
         Check(
             "Voice cloning (TTS)",

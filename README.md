@@ -152,12 +152,22 @@ and click **Generate speech**. Audio is saved automatically; use **Play speech**
 or **Save a copy** afterward. Voices and speech are stored under
 `%LOCALAPPDATA%\HeyClone` on Windows.
 
-The Windows executable includes recording and face detection. For speech,
-click **Set up voice engine** once in Voices. Setup downloads an isolated Python
-runtime and the speech dependencies (several GB), without requiring a system
-Python installation. Review the XTTS model license terms during setup. The model
-itself downloads on first generation. An internet connection is needed for setup
-and the initial model download; later generation uses the local model.
+The Windows app includes two selectable local engines:
+
+- **Chatterbox Nano (English)** is the default. It supports CPU inference and uses
+  the MIT license. Use a reference longer than 5 seconds (6?15 seconds recommended).
+- **Coqui XTTS v2** supports multiple languages. Its CPML model license permits
+  non-commercial use; the full terms appear inside HeyClone before installation.
+
+Choose an engine in **Voices**, then click **Install / repair engine**. Setup stays
+inside HeyClone, shows download progress, and loads the model before reporting
+Ready. No website, account, API key, or system Python installation is required.
+Each engine uses an isolated runtime so their dependencies do not conflict.
+Initial setup downloads several GB and needs an internet connection. Failures
+include the path to a diagnostic log under `%LOCALAPPDATA%\HeyClone\logs`.
+
+In **Full Clone**, choose an **Output video location** folder. HeyClone generates
+a unique `.mp4` filename in that folder and shows its path when complete.
 
 The model uses the saved reference for zero-shot cloning when generating speech;
 creating a voice does not train a new model. OpenCV is constrained to 4.x because
