@@ -16,7 +16,7 @@ def runtime_python():
 
 
 def _run(command, **kwargs):
-    proc = subprocess.run(command, capture_output=True, text=True,
+    proc = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace",
                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), **kwargs)
     if proc.returncode:
         raise RuntimeError((proc.stderr or proc.stdout)[-3000:])
@@ -47,7 +47,8 @@ def install_runtime():
         _run([str(uv), "venv", "--python", "3.11", str(python.parent.parent)], env=env)
     _run([str(uv), "pip", "install", "--python", str(python),
           "torch==2.8.0", "torchaudio==2.8.0", "--torch-backend=auto"], env=env)
-    _run([str(uv), "pip", "install", "--python", str(python), "coqui-tts>=0.27.4,<0.28"], env=env)
+    _run([str(uv), "pip", "install", "--python", str(python),
+          "coqui-tts>=0.27.4,<0.28", "transformers>=4.57,<5"], env=env)
     _run([str(python), "-c", "from TTS.api import TTS"], env=env)
     (python.parent.parent / "ready").write_text("coqui-tts", encoding="utf-8")
     return "Voice engine installed. Select a voice and generate speech. The model downloads on first use."
