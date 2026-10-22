@@ -74,15 +74,13 @@ Add `--gpu` to also install the voice/avatar model dependencies; use
 `--dir PATH` to choose an install location. Re-running is safe (`--force`
 recreates the venv). After installing, run `heyclone gpu` / `heyclone doctor`.
 
-Prebuilt packages are produced automatically by the
-`.github/workflows/build-installers.yml` workflow (on GitHub's Windows, macOS,
-and Linux runners): `HeyClone.exe` (Windows), `HeyClone.dmg` (macOS), and a
-standalone Linux binary. To build locally on the target OS:
+Download the Windows executable from the repository's [Releases](https://github.com/bensblueprints/HeyClone/releases).
+To build locally on the target OS:
 
 - Windows `.exe` — run `packaging\windows\build-exe.bat` (installs build dependencies
   in `.venv` and uses PyInstaller), or
   compile `packaging/windows/heyclone.iss` with Inno Setup
-- macOS `.dmg` — PyInstaller app bundle + `hdiutil` (see the workflow)
+- macOS `.dmg` — PyInstaller app bundle + `hdiutil`
 - Linux — PyInstaller one-file binary, or `packaging/linux/build-deb.sh` for a `.deb`
 
 ## Commands
