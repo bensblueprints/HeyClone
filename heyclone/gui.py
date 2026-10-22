@@ -8,11 +8,15 @@ Launch with:
 
 from __future__ import annotations
 
+import time
+import sys
+import shutil
+import uuid
 import queue
 import threading
 from pathlib import Path
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
@@ -21,6 +25,8 @@ from .config import get_preset
 from .doctor import check_environment
 from .gpu.detect import detect_gpus
 from .voice.clone import VoiceCloner
+from .voice.library import VoiceLibrary
+from .voice.recording import VoiceRecorder
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -59,8 +65,14 @@ class HeyCloneApp(ctk.CTk):
         self._nav_buttons: dict[str, ctk.CTkButton] = {}
         self._sections: dict[str, ctk.CTkFrame] = {}
         self.detection = detect_gpus()
+        self.voice_library = VoiceLibrary()
+        self.recorder = VoiceRecorder()
+        self._voice_map = {}
+        self._last_speech = None
+        self.protocol("WM_DELETE_WINDOW", self._close_app)
 
         self._build_layout()
+        self._refresh_voices()
         self._refresh_gpu()
         self.show_section("detect")
 
@@ -97,7 +109,7 @@ class HeyCloneApp(ctk.CTk):
         )
 
         for i, (key, label) in enumerate(
-            [("detect", "Detect"), ("voice", "Voice Clone"), ("avatar", "Avatar"), ("clone", "Full Clone")]
+            [("detect", "Detect"), ("voice", "Create Voice"), ("voices", "Voices"), ("avatar", "Avatar"), ("clone", "Full Clone")]
         ):
             btn = ctk.CTkButton(
                 side,
@@ -126,6 +138,7 @@ class HeyCloneApp(ctk.CTk):
 
         self._sections["detect"] = self._build_detect(content)
         self._sections["voice"] = self._build_voice(content)
+        self._sections["voices"] = self._build_voices(content)
         self._sections["avatar"] = self._build_avatar(content)
         self._sections["clone"] = self._build_clone(content)
 
@@ -186,20 +199,40 @@ class HeyCloneApp(ctk.CTk):
         return frame
 
     def _build_voice(self, parent) -> ctk.CTkFrame:
-        frame = self._section(parent, "Voice Clone", "Clone a voice from a reference clip")
+        frame = self._section(parent, "Create Voice", "1. Upload or record   /   2. Create your voice   /   3. Write a script in Voices")
         card = self._card(frame, 2)
-        self.ref_var = self._field(card, 0, "Reference audio (6-15s clip)")
-        self._browse(card, 0, self.ref_var, _AUDIO_TYPES, "audio")
-        self.text_var = self._field(card, 1, "Text to speak")
-        self.lang_var = self._field(card, 2, "Language code", "en")
-        self.out_voice_var = self._field(card, 3, "Output audio (.wav)")
-        self._browse(card, 3, self.out_voice_var, [("WAV", "*.wav")], "saveaudio")
-        ctk.CTkButton(
-            card, text="Clone Voice", height=42, corner_radius=8,
-            fg_color=ACCENT, hover_color=ACCENT_HOVER, font=_font(14, "bold"),
-            command=self._clone_voice,
-        ).grid(row=4, column=1, sticky="w", pady=(18, 16))
+        self.voice_name_var = self._field(card, 0, "Voice name")
+        ctk.CTkLabel(card, text="Use a clear 6-15 second clip of one speaker.", font=_font(13), text_color=MUTED).grid(row=1, column=0, columnspan=3, padx=18, pady=8, sticky="w")
+        self.upload_button = ctk.CTkButton(card, text="Upload audio", command=self._upload_voice)
+        self.upload_button.grid(row=2, column=0, padx=18, pady=12)
+        self.record_button = ctk.CTkButton(card, text="Record microphone", command=self._toggle_recording)
+        self.record_button.grid(row=2, column=1, padx=18, pady=12, sticky="w")
+        self.ref_var = tk.StringVar(value="")
+        self.capture_status = tk.StringVar(value="Upload a file or record using your default microphone.")
+        ctk.CTkLabel(card, textvariable=self.capture_status, wraplength=580, justify="left", font=_font(13)).grid(row=3, column=0, columnspan=3, padx=18, pady=12, sticky="w")
+        self.create_voice_button = ctk.CTkButton(card, text="Create Voice", command=self._save_voice, height=42, state="disabled", fg_color=ACCENT)
+        self.create_voice_button.grid(row=4, column=0, columnspan=2, padx=18, pady=16, sticky="w")
         self.voice_result = self._result_box(frame, 3)
+        return frame
+
+    def _build_voices(self, parent) -> ctk.CTkFrame:
+        frame = self._section(parent, "Voices", "Choose a saved voice, write your script, and generate speech")
+        card = self._card(frame, 2)
+        self.voice_choice = tk.StringVar(value="No voices yet")
+        self.voice_selector = ctk.CTkOptionMenu(card, variable=self.voice_choice, values=["No voices yet"])
+        self.voice_selector.grid(row=0, column=0, columnspan=2, padx=18, pady=14, sticky="ew")
+        self.lang_var = self._field(card, 1, "Language code", "en")
+        ctk.CTkLabel(card, text="Script", font=_font(13)).grid(row=2, column=0, padx=18, sticky="w")
+        self.script_box = ctk.CTkTextbox(card, height=150, font=_font(14))
+        self.script_box.grid(row=3, column=0, columnspan=2, padx=18, pady=10, sticky="ew")
+        self.generate_button = ctk.CTkButton(card, text="Generate speech", command=self._clone_voice, height=42, fg_color=ACCENT, state="disabled")
+        self.generate_button.grid(row=4, column=0, padx=18, pady=12)
+        self.play_button = ctk.CTkButton(card, text="Play speech", command=self._play_speech, state="disabled")
+        self.play_button.grid(row=4, column=1, padx=18, pady=12, sticky="w")
+        self.export_button = ctk.CTkButton(card, text="Save a copy...", command=self._export_speech, state="disabled")
+        self.export_button.grid(row=5, column=0, padx=18, pady=(0, 12))
+        ctk.CTkButton(card, text="Set up voice engine", command=self._setup_voice_engine).grid(row=5, column=1, padx=18, pady=(0, 12), sticky="w")
+        self.speech_result = self._result_box(frame, 3)
         return frame
 
     def _build_avatar(self, parent) -> ctk.CTkFrame:
@@ -314,18 +347,139 @@ class HeyCloneApp(ctk.CTk):
 
         self._run_async(fn, self.doctor_text, "Running environment check")
 
-    def _clone_voice(self) -> None:
-        ref, text, out, lang = self._voice_inputs()
-        if not ref or not text or not out:
-            self._show_error(self.voice_result, "Please fill in reference audio, text, and output audio.")
+    def _upload_voice(self):
+        if self._busy or self.recorder.stream is not None:
             return
-        cloner = VoiceCloner(detection=self.detection)
+        path = filedialog.askopenfilename(filetypes=[("Audio", "*.wav *.mp3 *.flac *.ogg")])
+        if path:
+            self.ref_var.set(path)
+            self.capture_status.set(f"Ready: {Path(path).name}")
+            if not self.voice_name_var.get().strip():
+                self.voice_name_var.set(Path(path).stem)
+            self.create_voice_button.configure(state="normal")
 
+    def _toggle_recording(self):
+        if self._busy:
+            return
+        if self.recorder.stream is not None:
+            self._stop_recording()
+            return
+        try:
+            self.recorder.start()
+            self._record_started = time.monotonic()
+        except Exception as exc:
+            self._show_error(self.voice_result, f"Could not access the microphone: {exc}")
+            return
+        self.ref_var.set("")
+        self.create_voice_button.configure(state="disabled")
+        self.upload_button.configure(state="disabled")
+        self.record_button.configure(text="Stop recording", fg_color=DANGER)
+        self._record_tick()
+
+    def _record_tick(self):
+        if self.recorder.stream is None:
+            return
+        self.capture_status.set(f"Recording: {self.recorder.seconds:.1f}s / 30s. Speak clearly, then press Stop.")
+        if time.monotonic() - self._record_started >= 30 or self.recorder.error:
+            self._stop_recording()
+        else:
+            self.after(200, self._record_tick)
+
+    def _stop_recording(self):
+        try:
+            path = self.voice_library.root / "recordings" / f"recording-{uuid.uuid4().hex}.wav"
+            self.recorder.save(path)
+            self.ref_var.set(str(path))
+            self.capture_status.set(f"Recorded {self.recorder.seconds:.1f}s. Give it a name and click Create Voice.")
+            self.create_voice_button.configure(state="normal")
+        except Exception as exc:
+            self.capture_status.set("Recording not saved. Please try again.")
+            self._show_error(self.voice_result, str(exc))
+        finally:
+            self.record_button.configure(text="Record microphone", fg_color=ACCENT)
+            self.upload_button.configure(state="normal")
+
+    def _save_voice(self):
+        name, reference = self.voice_name_var.get().strip(), self.ref_var.get().strip()
+        if not name or not reference:
+            self._show_error(self.voice_result, "Enter a voice name and upload or record audio first.")
+            return
+        def saved(voice):
+            self._refresh_voices(voice.id)
+            self.show_section("voices")
+            self._show_ok(self.speech_result, f"{voice.name} is ready. Enter a script to hear it speak.")
+        self._run_async(lambda: self.voice_library.add(name, reference), self.voice_result, "Creating voice", saved)
+
+    def _refresh_voices(self, selected_id=None):
+        voices = self.voice_library.voices()
+        self._voice_map = {f"{v.name} ({v.id[:6]})": v for v in voices}
+        values = list(self._voice_map) or ["No voices yet ? create one first"]
+        self.voice_selector.configure(values=values, state="normal" if voices else "disabled")
+        selected = next((label for label, v in self._voice_map.items() if v.id == selected_id), None)
+        self.voice_choice.set(selected or (self.voice_choice.get() if self.voice_choice.get() in self._voice_map else values[0]))
+        self.generate_button.configure(state="normal" if voices else "disabled")
+
+    def _clone_voice(self) -> None:
+        voice = self._voice_map.get(self.voice_choice.get())
+        text = self.script_box.get("1.0", "end").strip()
+        lang = self.lang_var.get().strip() or "en"
+        if not voice or not text:
+            self._show_error(self.speech_result, "Select a voice and type a script first.")
+            return
+        cloner = VoiceCloner(detection=self.detection, use_runtime=sys.platform == "win32")
         def fn():
-            r = cloner.clone_voice(ref, text, out, lang)
-            return f"Saved voice to {r.output_path}\nSample rate: {r.sample_rate} Hz · GPU: {r.gpu_used}"
+            out = self.voice_library.output_path()
+            return cloner.clone_voice(voice.reference, text, out, lang)
+        def generated(result):
+            self._last_speech = Path(result.output_path)
+            self.play_button.configure(state="normal")
+            self.export_button.configure(state="normal")
+            self._show_ok(self.speech_result, f"Speech saved automatically to {result.output_path}")
+        self._run_async(fn, self.speech_result, "Generating speech", generated)
 
-        self._run_async(fn, self.voice_result, "Cloning voice")
+    def _setup_voice_engine(self):
+        if self._busy or self.recorder.stream is not None:
+            return
+        import webbrowser
+        from .voice.library import data_dir
+        from .voice.runtime import install_runtime
+        if messagebox.askyesno("Voice engine setup", "Setup downloads the speech engine (several GB). XTTS has model license terms at https://coqui.ai/cpml. Open the terms before continuing?"):
+            webbrowser.open("https://coqui.ai/cpml")
+        if not messagebox.askyesno("XTTS model terms", "Do you accept the XTTS model terms at https://coqui.ai/cpml and want to install the voice engine?"):
+            return
+        root = data_dir()
+        root.mkdir(parents=True, exist_ok=True)
+        (root / "xtts-terms-accepted").write_text("Accepted in HeyClone setup", encoding="utf-8")
+        self._run_async(install_runtime, self.speech_result, "Installing voice engine ? this may take several minutes")
+
+    def _play_speech(self):
+        if self._last_speech is None:
+            return
+        path = self._last_speech
+        def play():
+            import sounddevice as sd
+            import soundfile as sf
+            audio, rate = sf.read(path, dtype="float32")
+            sd.play(audio, rate)
+            sd.wait()
+            return "Playback finished."
+        self._run_async(play, self.speech_result, "Playing speech")
+
+    def _export_speech(self):
+        if self._last_speech is None:
+            return
+        destination = filedialog.asksaveasfilename(defaultextension=".wav", filetypes=[("WAV", "*.wav")])
+        if destination:
+            try:
+                if Path(destination).resolve() != self._last_speech.resolve():
+                    shutil.copy2(self._last_speech, destination)
+                self._show_ok(self.speech_result, f"Saved copy to {destination}")
+            except OSError as exc:
+                self._show_error(self.speech_result, str(exc))
+
+    def _close_app(self):
+        self.recorder.close()
+        self.destroy()
 
     def _prepare_avatar(self) -> None:
         src = self.src_var.get().strip()
@@ -353,7 +507,7 @@ class HeyCloneApp(ctk.CTk):
             self._show_error(self.clone_result, "Please fill in source, reference audio, text, and output video.")
             return
         avatar = AvatarCloner(detection=self.detection)
-        voice = VoiceCloner(detection=self.detection)
+        voice = VoiceCloner(detection=self.detection, use_runtime=sys.platform == "win32")
 
         def fn():
             profile = avatar.prepare(src)
@@ -364,17 +518,9 @@ class HeyCloneApp(ctk.CTk):
 
         self._run_async(fn, self.clone_result, "Creating clone")
 
-    def _voice_inputs(self):
-        return (
-            self.ref_var.get().strip(),
-            self.text_var.get().strip(),
-            self.out_voice_var.get().strip(),
-            self.lang_var.get().strip() or "en",
-        )
-
     # ------------------------------------------------------- background
-    def _run_async(self, fn, result_box: ctk.CTkTextbox, label: str) -> None:
-        if self._busy:
+    def _run_async(self, fn, result_box: ctk.CTkTextbox, label: str, on_success=None) -> None:
+        if self._busy or self.recorder.stream is not None:
             self._set_status("Busy — another operation is running", DANGER)
             return
         self._busy = True
@@ -388,19 +534,22 @@ class HeyCloneApp(ctk.CTk):
                 self._queue.put(("err", str(exc)))
 
         threading.Thread(target=worker, daemon=True).start()
-        self._poll_queue(result_box, label)
+        self._poll_queue(result_box, label, on_success)
 
-    def _poll_queue(self, result_box: ctk.CTkTextbox, label: str) -> None:
+    def _poll_queue(self, result_box: ctk.CTkTextbox, label: str, on_success=None) -> None:
         try:
             status, payload = self._queue.get_nowait()
         except queue.Empty:
-            self.after(100, lambda: self._poll_queue(result_box, label))
+            self.after(100, lambda: self._poll_queue(result_box, label, on_success))
             return
         self._busy = False
         self.progress.stop()
         if status == "ok":
             self._set_status(f"Done — {label}", SUCCESS)
-            self._show_ok(result_box, payload)
+            if on_success:
+                on_success(payload)
+            else:
+                self._show_ok(result_box, payload)
         else:
             self._set_status(f"Failed — {label}", DANGER)
             self._show_error(result_box, payload)

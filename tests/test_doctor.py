@@ -38,6 +38,7 @@ class TestCheckEnvironment(unittest.TestCase):
         gpu = GpuInfo(0, "RTX 3090", 24576, GpuBackend.NVML, is_cuda=True)
         det = DetectionResult(gpus=[gpu], backend=GpuBackend.NVML)
         with mock.patch("heyclone.doctor._module_available", return_value=True), \
+             mock.patch("heyclone.doctor.load_face_detector"), \
              mock.patch("heyclone.doctor._torch_cuda_available", return_value=True), \
              mock.patch.dict("os.environ", {"LIPSYNC_DIR": "/tmp/lipsync"}), \
              mock.patch("heyclone.doctor.Path.is_file", return_value=True):

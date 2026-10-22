@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import importlib
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from .gpu.detect import DetectionResult, GpuBackend, detect_gpus
+from .avatar.opencv import load_face_detector
 
 
 @dataclass
@@ -93,23 +95,33 @@ def check_environment(detection: Optional[DetectionResult] = None) -> list[Check
 
     # Voice cloning
     has_tts = _module_available("TTS")
+    if getattr(sys, "frozen", False):
+        from .voice.runtime import runtime_python
+        has_tts = (runtime_python().parent.parent / "ready").is_file()
     checks.append(
         Check(
             "Voice cloning (TTS)",
             has_tts,
             "available" if has_tts else "missing",
-            "" if has_tts else "pip install TTS",
+            "" if has_tts else "Set up voice engine in Voices (or install coqui-tts for source installs)",
         )
     )
 
     # Avatar face detection
     has_cv2 = _module_available("cv2")
+    cv2_hint = 'python -m pip install "opencv-python>=4.8,<5"'
+    if has_cv2:
+        try:
+            load_face_detector()
+        except RuntimeError as exc:
+            has_cv2 = False
+            cv2_hint = str(exc)
     checks.append(
         Check(
             "Avatar face detection",
             has_cv2,
             "available" if has_cv2 else "missing",
-            "" if has_cv2 else "pip install opencv-python",
+            "" if has_cv2 else cv2_hint,
         )
     )
 

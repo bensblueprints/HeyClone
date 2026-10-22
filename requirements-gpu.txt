@@ -6,7 +6,7 @@
 TTS>=0.22.0
 
 # Avatar face detection + image/video I/O
-opencv-python
+opencv-python>=4.8,<5
 numpy
 
 # Optional: production-quality face-landmark alignment (not required)

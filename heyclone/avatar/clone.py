@@ -25,6 +25,7 @@ from typing import Optional
 
 from ..config import get_preset
 from ..gpu.detect import DetectionResult, detect_gpus
+from .opencv import load_face_detector
 
 _SUPPORTED_IMAGE = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 _SUPPORTED_VIDEO = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
@@ -85,21 +86,12 @@ class AvatarCloner:
     def _extract_face_crop(
         self, src: Path, out: Path
     ) -> tuple[Optional[str], int]:
-        try:
-            import cv2  # type: ignore
-        except ImportError as exc:
-            raise RuntimeError(
-                "Avatar face detection requires 'opencv-python'. "
-                "Install it with:  pip install opencv-python"
-            ) from exc
+        cv2, cascade = load_face_detector()
 
         frame = self._read_frame(cv2, src)
         if frame is None:
             return None, 0
 
-        cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        )
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
         if len(faces) == 0:

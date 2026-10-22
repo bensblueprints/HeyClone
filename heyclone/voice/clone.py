@@ -9,6 +9,7 @@ target.
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -32,11 +33,12 @@ class VoiceCloner:
 
     MODEL_NAME = "tts_models/multilingual/multi-dataset/xtts_v2"
 
-    def __init__(self, detection: Optional[DetectionResult] = None):
+    def __init__(self, detection: Optional[DetectionResult] = None, use_runtime: bool = False):
         self.detection = detection if detection is not None else detect_gpus()
         self.preset = get_preset(self.detection.tier)
         self.use_gpu = self.detection.has_cuda
         self._tts = None
+        self.use_runtime = use_runtime or getattr(sys, "frozen", False)
 
     def _load(self):
         if self._tts is not None:
@@ -81,13 +83,17 @@ class VoiceCloner:
         out = Path(output_wav)
         out.parent.mkdir(parents=True, exist_ok=True)
 
-        tts = self._load()
-        tts.tts_to_file(
-            text=text.strip(),
-            speaker_wav=str(ref),
-            language=language,
-            file_path=str(out),
-        )
+        if self.use_runtime:
+            from .runtime import synthesize
+            synthesize(self.MODEL_NAME, ref, text.strip(), out, language, self.use_gpu)
+        else:
+            tts = self._load()
+            tts.tts_to_file(
+                text=text.strip(),
+                speaker_wav=str(ref),
+                language=language,
+                file_path=str(out),
+            )
 
         return VoiceCloneResult(
             output_path=str(out),

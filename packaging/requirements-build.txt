@@ -1,0 +1,7 @@
+pyinstaller>=6
+customtkinter>=5.2
+pynvml>=11.5
+# OpenCV 5 removed the Haar cascade API/data used by avatar preparation.
+opencv-python>=4.8,<5
+sounddevice>=0.5,<0.6
+soundfile>=0.13,<0.15

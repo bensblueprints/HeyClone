@@ -79,7 +79,8 @@ Prebuilt packages are produced automatically by the
 and Linux runners): `HeyClone.exe` (Windows), `HeyClone.dmg` (macOS), and a
 standalone Linux binary. To build locally on the target OS:
 
-- Windows `.exe` — run `packaging\windows\build-exe.bat` (uses PyInstaller), or
+- Windows `.exe` — run `packaging\windows\build-exe.bat` (installs build dependencies
+  in `.venv` and uses PyInstaller), or
   compile `packaging/windows/heyclone.iss` with Inno Setup
 - macOS `.dmg` — PyInstaller app bundle + `hdiutil` (see the workflow)
 - Linux — PyInstaller one-file binary, or `packaging/linux/build-deb.sh` for a `.deb`
@@ -123,7 +124,7 @@ runs; a 32 GB card runs full quality.
 - **Voice cloning** — `pip install TTS` (zero-shot). A clean 6-15 s reference
   clip is enough; no fine-tuning. Requires a GPU for reasonable speed, but CPU
   also works (slowly).
-- **Avatar face detection** — `pip install opencv-python` (Haar cascade, no
+- **Avatar face detection** — `pip install "opencv-python>=4.8,<5"` (Haar cascade, no
   weights).
 - **Avatar lip-sync** — point `LIPSYNC_DIR` at a talking-head lip-sync engine
   checkout (with its `scripts/inference.py`), download its weights, and pass an
@@ -138,3 +139,28 @@ inference requires a CUDA GPU and the model weights listed above — neither of
 which can run on a machine with only integrated graphics. The test suite covers
 all logic that doesn't require a GPU; end-to-end model inference must be
 verified on appropriate hardware.
+
+
+## Upload or record a voice
+
+Open **Create Voice**, enter a name, then **Upload audio** (WAV, MP3, FLAC,
+or OGG) or **Record microphone**. Use 6?15 seconds of clear speech and press
+**Stop recording**, then **Create Voice**. Recordings stop automatically at
+30 seconds. HeyClone keeps its own copy, so moving the original file does not
+remove the saved voice.
+
+In **Voices**, select the saved voice, type a script, choose its language code,
+and click **Generate speech**. Audio is saved automatically; use **Play speech**
+or **Save a copy** afterward. Voices and speech are stored under
+`%LOCALAPPDATA%\HeyClone` on Windows.
+
+The Windows executable includes recording and face detection. For speech,
+click **Set up voice engine** once in Voices. Setup downloads an isolated Python
+runtime and the speech dependencies (several GB), without requiring a system
+Python installation. Review the XTTS model license terms during setup. The model
+itself downloads on first generation. An internet connection is needed for setup
+and the initial model download; later generation uses the local model.
+
+The model uses the saved reference for zero-shot cloning when generating speech;
+creating a voice does not train a new model. OpenCV is constrained to 4.x because
+OpenCV 5 removed the Haar cascade API used by avatar preparation.

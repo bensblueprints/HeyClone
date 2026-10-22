@@ -4,12 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "heyclone"
-version = "0.1.0"
+version = "0.1.1"
 description = "Talking-head avatar & voice cloning with GPU VRAM-aware presets"
 requires-python = ">=3.9"
 dependencies = [
     "pynvml>=11.5",
     "customtkinter>=5.2",
+    "sounddevice>=0.5,<0.6",
+    "soundfile>=0.13,<0.15",
+    "numpy>=1.24",
 ]
 
 [project.scripts]
